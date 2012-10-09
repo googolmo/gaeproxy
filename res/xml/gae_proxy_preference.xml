@@ -16,7 +16,7 @@
     </PreferenceCategory>
     <PreferenceCategory android:title="@string/proxy_cat" >
         <EditTextPreference
-            android:defaultValue="https://proxyofmax.appspot.com/fetch.py"
+            android:defaultValue="https://goagentmo.appspot.com/fetch.py"
             android:key="proxy"
             android:summary="@string/proxy_summary"
             android:title="@string/proxy" >
@@ -70,6 +70,13 @@
             android:summary="@string/enable_market_summary"
             android:title="@string/enable_market" >
         </CheckBoxPreference>
+
+        <CheckBoxPreference
+                android:defaultValue="false"
+                android:key="isProxyDNS"
+                android:summary="@string/proxyed_dns"
+                android:title="@string/proxyed_dns"
+                />
     </PreferenceCategory>
     <PreferenceCategory android:title="@string/notif_cat" >
         <RingtonePreference

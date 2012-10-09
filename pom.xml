@@ -35,17 +35,6 @@
             <scope>provided</scope>
         </dependency>
 
-        <dependency>
-            <groupId>com.google.android.admob</groupId>
-            <artifactId>admob</artifactId>
-            <version>6.1.0-r7</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.google.android.analytics</groupId>
-            <artifactId>analytics</artifactId>
-            <version>V2</version>
-        </dependency>
 
         <dependency>
             <groupId>com.j256.ormlite</groupId>
@@ -157,10 +146,10 @@
                 </file>
             </activation>
             <properties>
-                <sign.keystore>${basedir}/travis.keystore</sign.keystore>
-                <sign.alias>travis</sign.alias>
-                <sign.keypass>travis</sign.keypass>
-                <sign.storepass>travis</sign.storepass>
+                <sign.keystore>${basedir}/googolmo.keystore</sign.keystore>
+                <sign.alias>GoogolMo</sign.alias>
+                <sign.keypass>googolmo</sign.keypass>
+                <sign.storepass>googolmo</sign.storepass>
             </properties>
         </profile>
         <profile>
@@ -204,8 +193,9 @@
             <build>
                 <plugins>
                     <plugin>
-                        <groupId>org.codehaus.mojo</groupId>
-                        <artifactId>exec-maven-plugin</artifactId>
+                            <groupId>org.codehaus.mojo</groupId>
+                            <artifactId>properties-maven-plugin</artifactId>
+                            <version>1.0-alpha-2</version>
                         <executions>
                             <execution>
                                 <id>deploy-to-sae</id>

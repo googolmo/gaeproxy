@@ -86,10 +86,10 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.google.ads.AdRequest;
-import com.google.ads.AdSize;
-import com.google.ads.AdView;
-import com.google.analytics.tracking.android.EasyTracker;
+//import com.google.ads.AdRequest;
+//import com.google.ads.AdSize;
+//import com.google.ads.AdView;
+//import com.google.analytics.tracking.android.EasyTracker;
 import com.j256.ormlite.android.apptools.OpenHelperManager;
 import com.j256.ormlite.dao.Dao;
 
@@ -146,7 +146,8 @@ public class GAEProxy extends PreferenceActivity implements
 	private CheckBoxPreference isHTTPSProxyCheck;
 	private CheckBoxPreference isGFWListCheck;
 	private CheckBoxPreference isRunningCheck;
-	private AdView adView;
+    private CheckBoxPreference isProxyDns;
+//	private AdView adView;
 	private Preference proxyedApps;
 
 	private Preference browser;
@@ -213,6 +214,7 @@ public class GAEProxy extends PreferenceActivity implements
 		isAutoConnectCheck.setEnabled(false);
 		isGlobalProxyCheck.setEnabled(false);
 		isHTTPSProxyCheck.setEnabled(false);
+        isProxyDns.setEnabled(false);
 	}
 
 	private void enableAll() {
@@ -226,6 +228,7 @@ public class GAEProxy extends PreferenceActivity implements
 		isAutoConnectCheck.setEnabled(true);
 		isGFWListCheck.setEnabled(true);
 		isHTTPSProxyCheck.setEnabled(true);
+        isProxyDns.setEnabled(true);
 	}
 
 	private boolean install() {
@@ -271,16 +274,16 @@ public class GAEProxy extends PreferenceActivity implements
 		addPreferencesFromResource(R.xml.gae_proxy_preference);
 
 		// Create the adView
-		adView = new AdView(GAEProxy.this, AdSize.BANNER, "a14d8be8a284afc");
+//		adView = new AdView(GAEProxy.this, AdSize.BANNER, "a14d8be8a284afc");
 		// Lookup your LinearLayout assuming it’s been given
 		// the attribute android:id="@+id/mainLayout"
-		FrameLayout layout = (FrameLayout) findViewById(R.id.ad);
+//		FrameLayout layout = (FrameLayout) findViewById(R.id.ad);
 		// Add the adView to it
-		layout.addView(adView);
+//		layout.addView(adView);
 		// Initiate a generic request to load it with an ad
-		AdRequest aq = new AdRequest();
+//		AdRequest aq = new AdRequest();
 		// aq.setTesting(true);
-		adView.loadAd(aq);
+//		adView.loadAd(aq);
 
 		proxyText = (EditTextPreference) findPreference("proxy");
 		portText = (EditTextPreference) findPreference("port");
@@ -293,6 +296,7 @@ public class GAEProxy extends PreferenceActivity implements
 		isHTTPSProxyCheck = (CheckBoxPreference) findPreference("isHTTPSProxy");
 		isGlobalProxyCheck = (CheckBoxPreference) findPreference("isGlobalProxy");
 		isGFWListCheck = (CheckBoxPreference) findPreference("isGFWList");
+        isProxyDns = (CheckBoxPreference) findPreference("isProxyDNS");
 
 		if (pd == null)
 			pd = ProgressDialog.show(this, "",
@@ -352,33 +356,33 @@ public class GAEProxy extends PreferenceActivity implements
 
 				if (!Utils.isInitialized()
 						&& !GAEProxyService.isServiceStarted()) {
-
-					try {
-						URL aURL = new URL("http://myhosts.sinaapp.com/hosts");
-						HttpURLConnection conn = (HttpURLConnection) aURL
-								.openConnection();
-						conn.setConnectTimeout(3 * 1000);
-						conn.setReadTimeout(6 * 1000);
-						conn.connect();
-						InputStream input = new BufferedInputStream(
-								conn.getInputStream());
-						OutputStream output = new FileOutputStream(
-								"/data/data/org.gaeproxy/hosts");
-
-						byte data[] = new byte[1024];
-
-						int count = 0;
-
-						while ((count = input.read(data)) != -1) {
-							output.write(data, 0, count);
-						}
-
-						output.flush();
-						output.close();
-						input.close();
-					} catch (Exception e) {
-						// Nothing
-					}
+//
+//					try {
+//						URL aURL = new URL("http://myhosts.sinaapp.com/hosts");
+//						HttpURLConnection conn = (HttpURLConnection) aURL
+//								.openConnection();
+//						conn.setConnectTimeout(3 * 1000);
+//						conn.setReadTimeout(6 * 1000);
+//						conn.connect();
+//						InputStream input = new BufferedInputStream(
+//								conn.getInputStream());
+//						OutputStream output = new FileOutputStream(
+//								"/data/data/org.gaeproxy/hosts");
+//
+//						byte data[] = new byte[1024];
+//
+//						int count = 0;
+//
+//						while ((count = input.read(data)) != -1) {
+//							output.write(data, 0, count);
+//						}
+//
+//						output.flush();
+//						output.close();
+//						input.close();
+//					} catch (Exception e) {
+//						// Nothing
+//					}
 				}
 
 				handler.sendEmptyMessage(MSG_INITIAL_FINISH);
@@ -417,7 +421,7 @@ public class GAEProxy extends PreferenceActivity implements
 			pd = null;
 		}
 
-		adView.destroy();
+//		adView.destroy();
 
 		super.onDestroy();
 	}
@@ -649,13 +653,13 @@ public class GAEProxy extends PreferenceActivity implements
 	@Override
 	public void onStart() {
 		super.onStart();
-		EasyTracker.getInstance().activityStart(this);
+//		EasyTracker.getInstance().activityStart(this);
 	}
 
 	@Override
 	public void onStop() {
 		super.onStop();
-		EasyTracker.getInstance().activityStop(this);
+//		EasyTracker.getInstance().activityStop(this);
 	}
 
 	private void recovery() {
@@ -764,7 +768,7 @@ public class GAEProxy extends PreferenceActivity implements
 		if (isTextEmpty(proxy, getString(R.string.proxy_empty)))
 			return false;
 
-		if (proxy.contains("proxyofmax.appspot.com")) {
+		if (proxy.contains("goagentmo.appspot.com")) {
 			final TextView message = new TextView(this);
 			message.setPadding(10, 5, 10, 5);
 			final SpannableString s = new SpannableString(
@@ -806,7 +810,7 @@ public class GAEProxy extends PreferenceActivity implements
 		isGlobalProxy = settings.getBoolean("isGlobalProxy", false);
 		isHTTPSProxy = settings.getBoolean("isHTTPSProxy", false);
 		isGFWList = settings.getBoolean("isGFWList", false);
-
+        boolean isDns = settings.getBoolean("isProxyDNS", false);
 		try {
 
 			Intent it = new Intent(this, GAEProxyService.class);
@@ -818,6 +822,7 @@ public class GAEProxy extends PreferenceActivity implements
 			bundle.putBoolean("isHTTPSProxy", isHTTPSProxy);
 			bundle.putString("proxyType", proxyType);
 			bundle.putBoolean("isGFWList", isGFWList);
+            bundle.putBoolean("isProxyDns", isDns);
 
 			it.putExtras(bundle);
 			startService(it);

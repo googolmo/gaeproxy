@@ -57,7 +57,7 @@ import android.os.Message;
 import android.preference.PreferenceManager;
 import android.util.Log;
 import android.widget.RemoteViews;
-import com.google.analytics.tracking.android.EasyTracker;
+//import com.google.analytics.tracking.android.EasyTracker;
 import org.apache.commons.codec.binary.Base64;
 import org.xbill.DNS.*;
 
@@ -123,6 +123,7 @@ public class GAEProxyService extends Service {
   private boolean isGlobalProxy = false;
   private boolean isHTTPSProxy = false;
   private boolean isGFWList = false;
+    private boolean isProxyDns = false;
 
   private ProxyedApp apps[];
 
@@ -275,6 +276,7 @@ public class GAEProxyService extends Service {
     isGlobalProxy = bundle.getBoolean("isGlobalProxy");
     isHTTPSProxy = bundle.getBoolean("isHTTPSProxy");
     isGFWList = bundle.getBoolean("isGFWList");
+      isProxyDns = bundle.getBoolean("isProxyDns");
 
     Log.e(TAG, "GAE Proxy: " + proxy);
     Log.e(TAG, "Local Port: " + port);
@@ -337,7 +339,7 @@ public class GAEProxyService extends Service {
   public boolean handleConnection() {
 
     try {
-      Lookup lookup = new Lookup("www.google.com", Type.A);
+      Lookup lookup = new Lookup("www.google.cn", Type.A);
       Resolver resolver = new SimpleResolver("8.8.4.4");
       resolver.setTCP(true);
       resolver.setTimeout(10);
@@ -385,8 +387,11 @@ public class GAEProxyService extends Service {
 
     // DNS Proxy Setup
     // with AsyncHttpClient
-    dnsServer = new DNSServer(this, appMask[0]);
-    dnsPort = dnsServer.getServPort();
+      if (isProxyDns) {
+          dnsServer = new DNSServer(this, appMask[0]);
+          dnsPort = dnsServer.getServPort();
+      }
+
 
     // Random mirror for load balance
     // only affect when appid equals proxyofmax
@@ -410,9 +415,13 @@ public class GAEProxyService extends Service {
     if (!preConnection())
       return false;
 
-    Thread dnsThread = new Thread(dnsServer);
-    dnsThread.setDaemon(true);
-    dnsThread.start();
+      if (isProxyDns) {
+          Thread dnsThread = new Thread(dnsServer);
+          dnsThread.setDaemon(true);
+          dnsThread.start();
+      }
+
+
 
     connect();
 
@@ -489,8 +498,8 @@ public class GAEProxyService extends Service {
   public void onCreate() {
     super.onCreate();
 
-    EasyTracker.getTracker().trackEvent("service", "start",
-        getVersionName(), 0L);
+//    EasyTracker.getTracker().trackEvent("service", "start",
+//        getVersionName(), 0L);
 
     settings = PreferenceManager.getDefaultSharedPreferences(this);
     notificationManager = (NotificationManager) this
@@ -526,8 +535,8 @@ public class GAEProxyService extends Service {
   @Override
   public void onDestroy() {
 
-    EasyTracker.getTracker().trackEvent("service", "stop",
-        getVersionName(), 0L);
+//    EasyTracker.getTracker().trackEvent("service", "stop",
+//        getVersionName(), 0L);
 
     statusLock = true;
 
@@ -550,12 +559,16 @@ public class GAEProxyService extends Service {
       Log.e(TAG, "HTTP Server close unexpected");
     }
 
-    try {
-      if (dnsServer != null)
-        dnsServer.close();
-    } catch (Exception e) {
-      Log.e(TAG, "DNS Server close unexpected");
-    }
+      if (isProxyDns) {
+          try {
+              if (dnsServer != null)
+                  dnsServer.close();
+          } catch (Exception e) {
+              Log.e(TAG, "DNS Server close unexpected");
+          }
+      }
+
+
 
     new Thread() {
       @Override
@@ -637,93 +650,93 @@ public class GAEProxyService extends Service {
    */
   private boolean preConnection() {
 
-    if (isHTTPSProxy) {
-      InputStream is = null;
-
-      String socksIp = settings.getString("socksIp", null);
-      String socksPort = settings.getString("socksPort", null);
-
-      String sig = Utils.getSignature(this);
-
-      if (sig == null)
-        return false;
-
-      for (int tries = 0; tries < 2; tries++) {
-        try {
-          URL aURL = new URL(
-              "http://myhosts.sinaapp.com/port4.php?sig=" + sig);
-          HttpURLConnection conn = (HttpURLConnection) aURL
-              .openConnection();
-          conn.setConnectTimeout(4000);
-          conn.setReadTimeout(8000);
-          conn.connect();
-          is = conn.getInputStream();
-
-          BufferedReader reader = new BufferedReader(
-              new InputStreamReader(is));
-
-          String line = reader.readLine();
-
-          if (line.startsWith("ERROR"))
-            return false;
-
-          if (!line.startsWith("#ip"))
-            throw new Exception("Format error");
-          line = reader.readLine();
-          socksIp = line.trim().toLowerCase();
-
-          line = reader.readLine();
-          if (!line.startsWith("#port"))
-            throw new Exception("Format error");
-          line = reader.readLine();
-          socksPort = line.trim().toLowerCase();
-
-          Editor ed = settings.edit();
-          ed.putString("socksIp", socksIp);
-          ed.putString("socksPort", socksPort);
-          ed.commit();
-
-        } catch (Exception e) {
-          Log.e(TAG, "cannot get remote port info", e);
-          continue;
-        }
-        break;
-      }
-
-      if (socksIp == null || socksPort == null)
-        return false;
-
-      // Configure file for Stunnel
-      FileOutputStream fs;
-      try {
-        fs = new FileOutputStream(BASE + "stunnel.conf");
-        String conf = "debug = 0\n" + "client = yes\n" + "pid = "
-            + BASE + "stunnel.pid\n" + "[https]\n"
-            + "sslVersion = all\n" + "accept = 127.0.0.1:8126\n"
-            + "connect = " + socksIp + ":" + socksPort + "\n";
-        fs.write(conf.getBytes());
-        fs.flush();
-        fs.close();
-      } catch (FileNotFoundException e) {
-      } catch (IOException e) {
-      }
-
-      // Start stunnel here
-      Utils.runRootCommand(BASE + "stunnel " + BASE + "stunnel.conf");
-
-      // Reset host / port
-      socksIp = "127.0.0.1";
-      socksPort = "8126";
-
-      Log.d(TAG, "Forward Successful");
-      if (Utils.isRoot())
-        Utils.runRootCommand(BASE + "proxy.sh start " + port + " "
-            + socksIp + " " + socksPort);
-      else
-        Utils.runCommand(BASE + "proxy.sh start " + port + " "
-            + socksIp + " " + socksPort);
-
-    } else {
+//    if (isHTTPSProxy) {
+//      InputStream is = null;
+//
+//      String socksIp = settings.getString("socksIp", null);
+//      String socksPort = settings.getString("socksPort", null);
+//
+//      String sig = Utils.getSignature(this);
+//
+//      if (sig == null)
+//        return false;
+//
+//      for (int tries = 0; tries < 2; tries++) {
+//        try {
+//          URL aURL = new URL(
+//              "http://myhosts.sinaapp.com/port4.php?sig=" + sig);
+//          HttpURLConnection conn = (HttpURLConnection) aURL
+//              .openConnection();
+//          conn.setConnectTimeout(4000);
+//          conn.setReadTimeout(8000);
+//          conn.connect();
+//          is = conn.getInputStream();
+//
+//          BufferedReader reader = new BufferedReader(
+//              new InputStreamReader(is));
+//
+//          String line = reader.readLine();
+//
+//          if (line.startsWith("ERROR"))
+//            return false;
+//
+//          if (!line.startsWith("#ip"))
+//            throw new Exception("Format error");
+//          line = reader.readLine();
+//          socksIp = line.trim().toLowerCase();
+//
+//          line = reader.readLine();
+//          if (!line.startsWith("#port"))
+//            throw new Exception("Format error");
+//          line = reader.readLine();
+//          socksPort = line.trim().toLowerCase();
+//
+//          Editor ed = settings.edit();
+//          ed.putString("socksIp", socksIp);
+//          ed.putString("socksPort", socksPort);
+//          ed.commit();
+//
+//        } catch (Exception e) {
+//          Log.e(TAG, "cannot get remote port info", e);
+//          continue;
+//        }
+//        break;
+//      }
+//
+//      if (socksIp == null || socksPort == null)
+//        return false;
+//
+//      // Configure file for Stunnel
+//      FileOutputStream fs;
+//      try {
+//        fs = new FileOutputStream(BASE + "stunnel.conf");
+//        String conf = "debug = 0\n" + "client = yes\n" + "pid = "
+//            + BASE + "stunnel.pid\n" + "[https]\n"
+//            + "sslVersion = all\n" + "accept = 127.0.0.1:8126\n"
+//            + "connect = " + socksIp + ":" + socksPort + "\n";
+//        fs.write(conf.getBytes());
+//        fs.flush();
+//        fs.close();
+//      } catch (FileNotFoundException e) {
+//      } catch (IOException e) {
+//      }
+//
+//      // Start stunnel here
+//      Utils.runRootCommand(BASE + "stunnel " + BASE + "stunnel.conf");
+//
+//      // Reset host / port
+//      socksIp = "127.0.0.1";
+//      socksPort = "8126";
+//
+//      Log.d(TAG, "Forward Successful");
+//      if (Utils.isRoot())
+//        Utils.runRootCommand(BASE + "proxy.sh start " + port + " "
+//            + socksIp + " " + socksPort);
+//      else
+//        Utils.runCommand(BASE + "proxy.sh start " + port + " "
+//            + socksIp + " " + socksPort);
+//
+//    } else {
 
       Log.d(TAG, "Forward Successful");
       if (Utils.isRoot())
@@ -732,7 +745,7 @@ public class GAEProxyService extends Service {
       else
         Utils.runCommand(BASE + "proxy.sh start " + port + " "
             + "127.0.0.1" + " " + port);
-    }
+//    }
 
     StringBuffer init_sb = new StringBuffer();
 
@@ -742,15 +755,18 @@ public class GAEProxyService extends Service {
 
     init_sb.append(Utils.getIptables() + " -t nat -F OUTPUT\n");
 
-    if (hasRedirectSupport) {
-      init_sb.append(Utils.getIptables()
-          + " -t nat -A OUTPUT -p udp --dport 53 -j REDIRECT --to "
-          + dnsPort + "\n");
-    } else {
-      init_sb.append(Utils.getIptables()
-          + " -t nat -A OUTPUT -p udp --dport 53 -j DNAT --to-destination 127.0.0.1:"
-          + dnsPort + "\n");
-    }
+      if (isProxyDns) {
+          if (hasRedirectSupport) {
+              init_sb.append(Utils.getIptables()
+                      + " -t nat -A OUTPUT -p udp --dport 53 -j REDIRECT --to "
+                      + dnsPort + "\n");
+          } else {
+              init_sb.append(Utils.getIptables()
+                      + " -t nat -A OUTPUT -p udp --dport 53 -j DNAT --to-destination 127.0.0.1:"
+                      + dnsPort + "\n");
+          }
+      }
+
 
     String cmd_bypass = Utils.getIptables() + CMD_IPTABLES_RETURN;
 
