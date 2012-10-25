@@ -108,12 +108,14 @@ public class GAEProxyService extends Service {
   private Process httpProcess = null;
   private DataOutputStream httpOS = null;
 
-  private String proxy;
+  private String proxyType = "GAE";
+  private String appId;
+  private String appPath;
   private String appHost = DEFAULT_HOST;
   private String[] appMask;
   private int port;
   private String sitekey;
-  private String proxyType = "GoAgent";
+  private String dnsHost = null;
   private DNSServer dnsServer = null;
   private int dnsPort = 8153;
 
@@ -205,23 +207,43 @@ public class GAEProxyService extends Service {
     }
   };
 
+  private boolean parseProxyURL(String url) {
+    if (proxyType.equals("PaaS")) {
+      Uri uri = Uri.parse(url);
+      if (uri == null) {
+        return false;
+      }
+      appId = uri.getHost();
+      appPath = url + (url.endsWith("/") ? "" : "/");
+      return true;
+    }
+    if (url == null)
+      return false;
+    String[] proxyString = url.split("\\/");
+    if (proxyString.length < 4)
+      return false;
+    appPath = proxyString[3];
+    String[] ids = proxyString[2].split("\\.");
+    if (ids.length < 3)
+      return false;
+    appId = ids[0];
+    return true;
+  }
+
   public boolean connect() {
 
     try {
 
       StringBuffer sb = new StringBuffer();
 
-      sb.append(BASE + "localproxy.sh \""
-          + Utils.getDataPath(this) + "\"");
-
-      String[] proxyString = proxy.split("\\/");
-      if (proxyString.length < 4)
-        return false;
-      String[] appid = proxyString[2].split("\\.");
-      if (appid.length < 3)
-        return false;
-      sb.append(" goagent " + appid[0] + " " + port + " \"" + appHost
-          + "\" " + proxyString[3] + " " + sitekey);
+      sb.append(BASE + "localproxy.sh");
+      sb.append(" \"" + Utils.getDataPath(this) + "\"");
+      sb.append(" \"" + proxyType + "\"");
+      sb.append(" \"" + appId + "\"");
+      sb.append(" \"" + port + "\"");
+      sb.append(" \"" + appHost + "\"");
+      sb.append(" \"" + appPath + "\"");
+      sb.append(" \"" + sitekey + "\"");
 
       final String cmd = sb.toString();
 
@@ -269,16 +291,21 @@ public class GAEProxyService extends Service {
       return;
     }
 
-    proxy = bundle.getString("proxy");
-    proxyType = bundle.getString("proxyType");
     port = bundle.getInt("port");
     sitekey = bundle.getString("sitekey");
+    proxyType = bundle.getString("proxyType");
+
     isGlobalProxy = bundle.getBoolean("isGlobalProxy");
     isHTTPSProxy = bundle.getBoolean("isHTTPSProxy");
     isGFWList = bundle.getBoolean("isGFWList");
       isProxyDns = bundle.getBoolean("isProxyDns");
 
-    Log.e(TAG, "GAE Proxy: " + proxy);
+    if (!parseProxyURL(bundle.getString("proxy"))) {
+      stopSelf();
+      return;
+    }
+
+    Log.e(TAG, "Proxy: " + appId + " " + appPath);
     Log.e(TAG, "Local Port: " + port);
 
     // APNManager.setAPNProxy("127.0.0.1", Integer.toString(port), this);
@@ -333,13 +360,10 @@ public class GAEProxyService extends Service {
     markServiceStarted();
   }
 
-  /**
-   * Called when the activity is first created.
-   */
-  public boolean handleConnection() {
-
+  private String parseHost(String host) {
+    String address = null;
     try {
-      Lookup lookup = new Lookup("www.google.cn", Type.A);
+      Lookup lookup = new Lookup(host, Type.A);
       Resolver resolver = new SimpleResolver("8.8.4.4");
       resolver.setTCP(true);
       resolver.setTimeout(10);
@@ -358,30 +382,52 @@ public class GAEProxyService extends Service {
           }
           sb.append(addr.getHostAddress());
         }
-        appHost = sb.toString();
+        address = sb.toString();
       } else {
-        appHost = null;
+        address = null;
       }
     } catch (Exception ignore) {
-      appHost = null;
+      address = null;
     }
 
-    if (appHost == null) {
+    if (address == null) {
       try {
-        InetAddress addr = InetAddress.getByName("www.google.com");
-        appHost = addr.getHostAddress();
+        InetAddress addr = InetAddress.getByName(host);
+        address = addr.getHostAddress();
       } catch (Exception ignore) {
-        appHost = null;
+        address = null;
       }
     }
 
-    if (appHost == null || appHost.equals("")) {
-      appHost = DEFAULT_HOST;
+    return address;
+  }
+
+  /**
+   * Called when the activity is first created.
+   */
+  public boolean handleConnection() {
+
+    if (proxyType.equals("GAE")) {
+      appHost = parseHost("www.google.com");
+      if (appHost == null || appHost.equals("")) {
+        appHost = DEFAULT_HOST;
+      }
+      dnsHost = appHost;
+    } else if (proxyType.equals("PaaS")) {
+      appHost = parseHost(appId);
+      if (appHost == null || appHost.equals("")) {
+        return false;
+      }
+      dnsHost = parseHost("www.google.com");
+      if (dnsHost == null || dnsHost.equals("")) {
+        dnsHost = DEFAULT_HOST;
+      }
     }
 
-    appMask = appHost.split("\\|");
-
-    if (appMask.length <= 0) {
+    try {
+      dnsHost = dnsHost.split("\\|")[0];
+      appMask = appHost.split("\\|");
+    } catch (Exception ex) {
       return false;
     }
 
@@ -395,21 +441,12 @@ public class GAEProxyService extends Service {
 
     // Random mirror for load balance
     // only affect when appid equals proxyofmax
-    if (proxy.equals("https://proxyofmax.appspot.com/fetch.py")) {
-      proxyType = "GoAgent";
-      String[] mirror_list = null;
-      int mirror_num = 0;
+    if (appId.equals("proxyofmax")) {
       String mirror_string = new String(
           Base64.decodeBase64(getString(R.string.mirror_list).getBytes()));
-      mirror_list = mirror_string.split("\\|");
-
-      if (mirror_list != null) {
-        mirror_num = mirror_list.length;
-        Random random = new Random(System.currentTimeMillis());
-        int n = random.nextInt(mirror_num);
-        proxy = "https://" + mirror_list[n] + ".appspot.com/fetch.py";
-        Log.d(TAG, "Balance Proxy: " + proxy);
-      }
+      appId = mirror_string;
+      appPath = getString(R.string.mirror_path);
+      sitekey = getString(R.string.mirror_sitekey);
     }
 
     if (!preConnection())
@@ -644,10 +681,6 @@ public class GAEProxyService extends Service {
     return START_STICKY;
   }
 
-  /**
-   * Internal method to request actual PTY terminal once we've finished
-   * authentication. If called before authenticated, it will just fail.
-   */
   private boolean preConnection() {
 
 //    if (isHTTPSProxy) {
@@ -755,6 +788,8 @@ public class GAEProxyService extends Service {
 
     init_sb.append(Utils.getIptables() + " -t nat -F OUTPUT\n");
 
+      Log.d(TAG, "gaeproxy.isProxyDns=" + isProxyDns);
+
       if (isProxyDns) {
           if (hasRedirectSupport) {
               init_sb.append(Utils.getIptables()
@@ -773,11 +808,16 @@ public class GAEProxyService extends Service {
     for (String mask : appMask) {
       init_sb.append(cmd_bypass.replace("0.0.0.0", mask));
     }
-    init_sb.append(cmd_bypass.replace("-d 0.0.0.0", "-m owner --uid-owner "
-        + getApplicationInfo().uid));
+    if (Utils.isRoot()) {
+      init_sb.append(cmd_bypass.replace("-d 0.0.0.0", "-p tcp -m owner --uid-owner "
+          + 0));
+    } else {
+      init_sb.append(cmd_bypass.replace("-d 0.0.0.0", "-p tcp -m owner --uid-owner "
+          + getApplicationInfo().uid));
+    }
+    init_sb.append(cmd_bypass.replace("0.0.0.0", dnsHost));
 
     if (isGFWList) {
-
       String[] chn_list = getResources().getStringArray(R.array.chn_list);
 
       for (String item : chn_list) {
