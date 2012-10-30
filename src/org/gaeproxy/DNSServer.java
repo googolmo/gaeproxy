@@ -111,6 +111,15 @@ public class DNSServer implements Runnable {
     }
   }
 
+  private synchronized void updateCache(DNSResponse response) {
+    try {
+      Dao<DNSResponse, String> dnsCacheDao = helper.getDNSCacheDao();
+      dnsCacheDao.createOrUpdate(response);
+    } catch (Exception e) {
+      Log.e(TAG, "Cannot open DAO", e);
+    }
+  }
+
   public void close() throws IOException {
     inService = false;
     srvSocket.close();
@@ -136,7 +145,7 @@ public class DNSServer implements Runnable {
     */
   protected byte[] createDNSResponse(byte[] quest, byte[] ips) {
     int start = 0;
-    byte[] response = new byte[512];
+    byte[] response = new byte[4096];
 
     for (int val : DNS_HEADERS) {
       response[start] = (byte) val;
@@ -472,7 +481,9 @@ public class DNSServer implements Runnable {
         final String questDomain = getRequestDomain(udpreq);
         DNSResponse resp = queryFromCache(questDomain);
         if (resp != null) {
-          sendDns(createDNSResponse(udpreq, parseIPString(resp.getAddress())), dnsq,
+          String addr = resp.getAddress();
+          updateCache(resp);
+          sendDns(createDNSResponse(udpreq, parseIPString(addr)), dnsq,
               srvSocket);
           Log.d(TAG, "DNS cache hit: " + questDomain);
         } else if (orgCache.containsKey(questDomain)) {
